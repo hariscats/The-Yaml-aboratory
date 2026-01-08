@@ -1,0 +1,128 @@
+---
+# Health Probes Demonstration
+# This demo shows liveness, readiness, and startup probes for container health monitoring
+# Kubernetes Version: 1.16+
+# Feature: Health probes help Kubernetes determine when to restart containers and route traffic
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: health-probes-demo
+  labels:
+    app: health-demo
+  annotations:
+    description: "Demonstrates liveness, readiness, and startup probes"
+spec:
+  containers:
+  - name: web-app
+    image: nginx:1.25
+    ports:
+    - containerPort: 80
+      name: http
+
+    # Startup Probe - Allows slow-starting containers to fully initialize
+    # Kubernetes won't check liveness/readiness until this succeeds
+    # Useful for applications with long initialization times (database migrations, cache warming, etc.)
+    startupProbe:
+      httpGet:
+        path: /
+        port: http
+      # Check every 5 seconds
+      periodSeconds: 5
+      # Allow up to 30 attempts (150 seconds total) for startup
+      failureThreshold: 30
+      # Must succeed once to pass
+      successThreshold: 1
+      # Wait 10 seconds after container starts before first check
+      initialDelaySeconds: 10
+
+    # Liveness Probe - Determines if container should be restarted
+    # If this fails, Kubernetes will kill and restart the container
+    # Use for detecting deadlocks, infinite loops, or corrupted states
+    livenessProbe:
+      httpGet:
+        path: /
+        port: http
+        httpHeaders:
+        - name: Custom-Header
+          value: LivenessCheck
+      # Wait 15 seconds after container starts
+      initialDelaySeconds: 15
+      # Check every 10 seconds
+      periodSeconds: 10
+      # Timeout for each probe attempt
+      timeoutSeconds: 3
+      # Restart after 3 consecutive failures
+      failureThreshold: 3
+      # Consider healthy after 1 success
+      successThreshold: 1
+
+    # Readiness Probe - Determines if container should receive traffic
+    # If this fails, Pod is removed from Service endpoints (no traffic)
+    # Use for detecting temporary unavailability (overload, dependency failures)
+    readinessProbe:
+      httpGet:
+        path: /
+        port: http
+      # Start checking immediately
+      initialDelaySeconds: 5
+      # Check every 5 seconds
+      periodSeconds: 5
+      # Timeout for each probe attempt
+      timeoutSeconds: 2
+      # Mark unready after 2 consecutive failures
+      failureThreshold: 2
+      # Mark ready after 1 success
+      successThreshold: 1
+
+    # Resource requests and limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+---
+# Service to expose the pod
+# This demonstrates how readiness probes affect traffic routing
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-probes-service
+spec:
+  selector:
+    app: health-demo
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: http
+  type: ClusterIP
+
+---
+# Alternative probe configurations (commented examples)
+# Uncomment and modify for different scenarios
+
+# # TCP Probe - For non-HTTP services
+# livenessProbe:
+#   tcpSocket:
+#     port: 8080
+#   initialDelaySeconds: 15
+#   periodSeconds: 20
+
+# # Exec Probe - Run custom command inside container
+# livenessProbe:
+#   exec:
+#     command:
+#     - cat
+#     - /tmp/healthy
+#   initialDelaySeconds: 5
+#   periodSeconds: 5
+
+# # gRPC Probe - For gRPC services (Kubernetes 1.24+)
+# livenessProbe:
+#   grpc:
+#     port: 9090
+#   initialDelaySeconds: 10
+#   periodSeconds: 10
