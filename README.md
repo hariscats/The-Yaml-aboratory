@@ -1,173 +1,163 @@
-# Kubernetes Pod CPU Resize Demo
+# The YAML-aboratory 🔬
 
-This repository demonstrates the **in-place pod resize** feature introduced in Kubernetes 1.27 (alpha) and enhanced in subsequent versions, including 1.35.
+A comprehensive collection of Kubernetes YAML demonstrations showcasing various container use-cases, features, and best practices.
 
-## Overview
+## Repository Structure
 
-The demo showcases how Kubernetes can resize container resources (CPU and memory) without restarting the pod when the `resizePolicy` is set to `NotRequired`.
+This repository is organized into sections based on different Kubernetes capabilities and use-cases:
 
-## Files
+### 📊 Resource Management
+**Location**: `resource-management/`
 
-- `pod-cpu-resize-demo.yaml` - Pod definition with resize policies configured
+Demonstrations of CPU, memory, and resource allocation features:
+- **In-place Pod Resize**: CPU/memory resizing without pod restarts (K8s 1.27+)
+- Resource quotas and limit ranges
+- QoS classes (Guaranteed, Burstable, BestEffort)
+- Resource management best practices
 
-## Pod Configuration
+**Current Demos**:
+- `pod-cpu-resize-demo.yaml` - In-place CPU resize with resizePolicy
 
-### Main Container: `reactor`
-- **Initial CPU limit**: 100m (0.1 CPU cores)
-- **ResizePolicy**: `NotRequired` for CPU (no restart needed on resize)
-- **Image**: nginx:latest
+### 🌐 Networking
+**Location**: `networking/`
 
-### Sidecar Container: `cpu-monitor`
-- **Purpose**: Monitors and displays the current CPU quota every 2 seconds
-- **Monitors**: `/sys/fs/cgroup/cpu.max` (cgroup v2) or legacy cgroup v1 paths
-- **Initial CPU limit**: 50m
+Network policies, services, ingress, and connectivity:
+- Network policies for pod-to-pod communication
+- Service types (ClusterIP, NodePort, LoadBalancer)
+- Ingress controllers and routing
+- DNS and service discovery
+- CNI plugins and configurations
+
+### 💾 Storage
+**Location**: `storage/`
+
+Persistent volumes, storage classes, and data management:
+- PersistentVolume and PersistentVolumeClaim patterns
+- Storage classes and dynamic provisioning
+- StatefulSets with persistent storage
+- Volume snapshots and cloning
+- CSI driver demonstrations
+
+### 🔒 Security
+**Location**: `security/`
+
+Security contexts, policies, and hardening techniques:
+- Pod Security Standards (PSS)
+- SecurityContext configurations
+- RBAC policies
+- Network policies for security
+- Secrets and ConfigMap management
+- Service accounts and identity
+
+### 📅 Scheduling
+**Location**: `scheduling/`
+
+Pod placement, affinity, and scheduling controls:
+- Node affinity and anti-affinity
+- Pod affinity and anti-affinity
+- Taints and tolerations
+- Priority classes
+- Topology spread constraints
+
+### 📈 Observability
+**Location**: `observability/`
+
+Monitoring, logging, and debugging:
+- Liveness, readiness, and startup probes
+- Prometheus metrics and monitoring
+- Logging patterns and sidecar logging
+- Debug containers
+- Events and troubleshooting
+
+### ⚡ Autoscaling
+**Location**: `autoscaling/`
+
+Horizontal and vertical pod autoscaling:
+- Horizontal Pod Autoscaler (HPA)
+- Vertical Pod Autoscaler (VPA)
+- Cluster Autoscaler integration
+- Custom metrics and scaling policies
+- KEDA (Kubernetes Event-Driven Autoscaling)
+
+### 🚀 Workloads
+**Location**: `workloads/`
+
+Different workload types and patterns:
+- Deployments and ReplicaSets
+- StatefulSets for stateful applications
+- DaemonSets for node-level services
+- Jobs and CronJobs
+- Init containers and lifecycle hooks
+
+## Getting Started
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/hariscats/The-Yaml-aboratory.git
+   cd The-Yaml-aboratory
+   ```
+
+2. **Browse demos by category**:
+   ```bash
+   ls -la resource-management/
+   ls -la networking/
+   # etc.
+   ```
+
+3. **Apply a demo**:
+   ```bash
+   kubectl apply -f resource-management/pod-cpu-resize-demo.yaml
+   ```
+
+4. **Read the documentation**:
+   Each demo folder contains its own README with specific instructions.
 
 ## Prerequisites
 
-- Kubernetes cluster version 1.27+ (1.35 recommended)
-- The `InPlacePodVerticalScaling` feature gate must be enabled
-- kubectl configured to access your cluster
+- Kubernetes cluster (version varies by demo)
+- `kubectl` CLI configured
+- Basic understanding of Kubernetes concepts
 
-### Enable Feature Gate
+Some demos may require:
+- Specific Kubernetes versions
+- Feature gates enabled
+- Additional controllers or operators
 
-For Kubernetes 1.27-1.28 (alpha):
-```bash
-# Add to kube-apiserver, kube-controller-manager, and kubelet flags:
---feature-gates=InPlacePodVerticalScaling=true
-```
+## Contributing
 
-For Kubernetes 1.29+ (beta), this may be enabled by default.
+Each demo should include:
+- ✅ Well-commented YAML manifests
+- ✅ README with prerequisites and instructions
+- ✅ Real-world use-case explanation
+- ✅ Testing and verification steps
+- ✅ Cleanup instructions
 
-## Usage
+## Demo Index
 
-### 1. Deploy the Pod
+| Category | Demo | Kubernetes Version | Description |
+|----------|------|-------------------|-------------|
+| Resource Management | [CPU Resize](resource-management/) | 1.27+ | In-place pod CPU resize without restart |
 
-```bash
-kubectl apply -f pod-cpu-resize-demo.yaml
-```
+*More demos coming soon!*
 
-### 2. Verify Pod is Running
+## Roadmap
 
-```bash
-kubectl get pod reactor-cpu-resize-demo
-```
+Upcoming demos:
+- Memory resize demonstrations
+- Network policy examples
+- StatefulSet with persistent storage
+- HPA with custom metrics
+- Pod Security Standards enforcement
+- Multi-container pod patterns
 
-### 3. Monitor CPU Quota in Real-Time
+## License
 
-Open a terminal and watch the sidecar container logs:
+See [LICENSE](LICENSE) file for details.
 
-```bash
-kubectl logs -f reactor-cpu-resize-demo -c cpu-monitor
-```
+## Feedback
 
-You should see output like:
-```
-Starting CPU quota monitor...
-[2026-01-08 12:00:00] CPU quota: 100000 200000
-[2026-01-08 12:00:02] CPU quota: 100000 200000
-```
+Found an issue or have a suggestion? Please open an issue or submit a pull request!
 
-The format is `quota/period` in microseconds. For example, `100000/200000` means:
-- Quota: 100,000 microseconds
-- Period: 200,000 microseconds
-- Effective CPU: 100,000/200,000 = 0.5 = 50% of one core (or 500m)
+---
 
-### 4. Perform In-Place CPU Resize
-
-In another terminal, resize the reactor container's CPU limit:
-
-```bash
-kubectl patch pod reactor-cpu-resize-demo --patch '
-spec:
-  containers:
-  - name: reactor
-    resources:
-      limits:
-        cpu: "200m"
-      requests:
-        cpu: "200m"
-'
-```
-
-Or increase it to 500m:
-
-```bash
-kubectl patch pod reactor-cpu-resize-demo --patch '
-spec:
-  containers:
-  - name: reactor
-    resources:
-      limits:
-        cpu: "500m"
-      requests:
-        cpu: "500m"
-'
-```
-
-### 5. Observe the Changes
-
-In the monitoring terminal, you should see the CPU quota change **without pod restart**:
-
-```
-[2026-01-08 12:00:00] CPU quota: 100000 200000
-[2026-01-08 12:00:02] CPU quota: 100000 200000
-[2026-01-08 12:00:04] CPU quota: 200000 200000  # <- Changed!
-[2026-01-08 12:00:06] CPU quota: 200000 200000
-```
-
-### 6. Check Pod Events
-
-```bash
-kubectl describe pod reactor-cpu-resize-demo
-```
-
-Look for events indicating the resize operation completed successfully.
-
-### 7. Verify No Restart Occurred
-
-```bash
-kubectl get pod reactor-cpu-resize-demo -o jsonpath='{.status.containerStatuses[?(@.name=="reactor")].restartCount}'
-```
-
-The restart count should remain at 0, proving the resize happened in-place!
-
-## Understanding ResizePolicy
-
-The `resizePolicy` field controls whether a container restart is required when resources are resized:
-
-- **`NotRequired`**: Resources can be resized without restarting the container (in-place)
-- **`RestartContainer`**: Container must be restarted for the new resources to take effect
-
-```yaml
-resizePolicy:
-- resourceName: cpu
-  restartPolicy: NotRequired
-- resourceName: memory
-  restartPolicy: NotRequired
-```
-
-## Cleanup
-
-```bash
-kubectl delete pod reactor-cpu-resize-demo
-```
-
-## Key Benefits
-
-1. **Zero Downtime**: Resize resources without pod restarts
-2. **Dynamic Scaling**: Adjust resources based on actual usage
-3. **Cost Optimization**: Right-size containers without service interruption
-4. **Improved SLAs**: Maintain service availability during resource adjustments
-
-## Notes
-
-- CPU resizes typically don't require container restart
-- Memory resizes may require restart depending on the container runtime
-- The actual cgroup path may vary depending on your Kubernetes version and container runtime
-  - cgroup v2: `/sys/fs/cgroup/cpu.max`
-  - cgroup v1: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`
-
-## References
-
-- [KEP-1287: In-place Update of Pod Resources](https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/1287-in-place-update-pod-resources)
-- [Kubernetes Documentation: Resize CPU and Memory Resources](https://kubernetes.io/docs/tasks/configure-pod-container/resize-container-resources/)
+**Happy YAML-ing! 🎯**
