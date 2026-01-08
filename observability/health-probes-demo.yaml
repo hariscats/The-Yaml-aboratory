@@ -126,3 +126,38 @@ spec:
 #     port: 9090
 #   initialDelaySeconds: 10
 #   periodSeconds: 10
+
+---
+# How to test health probes:
+#
+# 1. Apply the manifests:
+#    kubectl apply -f health-probes-demo.yaml
+#
+# 2. Watch pod status:
+#    kubectl get pod health-probes-demo --watch
+#
+# 3. Check probe status in pod description:
+#    kubectl describe pod health-probes-demo
+#    # Look for "Conditions" and "Events" sections
+#
+# 4. View container logs:
+#    kubectl logs health-probes-demo
+#
+# 5. Test readiness probe failure:
+#    kubectl exec health-probes-demo -- rm /usr/share/nginx/html/index.html
+#    # Pod should become NotReady (removed from service endpoints)
+#
+# 6. Restore readiness:
+#    kubectl exec health-probes-demo -- sh -c 'echo "OK" > /usr/share/nginx/html/index.html'
+#
+# 7. Cleanup:
+#    kubectl delete -f health-probes-demo.yaml
+#
+# AKS Compatibility Notes:
+# - All probe types (HTTP, TCP, Exec, gRPC) are fully supported in AKS
+# - gRPC probes require AKS 1.24+ (Kubernetes 1.24+)
+# - Azure Load Balancer respects readiness probes for traffic routing
+# - For AKS Ingress (AGIC), readiness probes determine backend health
+# - Consider using startup probes for Java/Spring applications with long startup times
+# - Azure Monitor Container Insights can track probe failures for alerting
+# - Probes contribute to pod restart metrics visible in Azure Portal

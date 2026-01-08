@@ -245,10 +245,18 @@ spec:
         nvidia.com/gpu: 1  # Request GPU resource
 
   # Simple node selector: Only schedule on nodes with GPU
+  # AKS GPU Node Pool Configuration:
+  # - AKS automatically labels GPU nodes with: kubernetes.azure.com/accelerator=nvidia
+  # - GPU node pools can be created with: az aks nodepool add --enable-gpu ...
+  # - Common AKS GPU VM sizes: Standard_NC6s_v3, Standard_NC12s_v3, Standard_NC24s_v3
+  # For generic Kubernetes, use custom labels:
   nodeSelector:
     accelerator: nvidia-gpu
     # To use this, label your GPU nodes:
     # kubectl label nodes <node-name> accelerator=nvidia-gpu
+    #
+    # For AKS, use the automatic label instead:
+    # kubernetes.azure.com/accelerator: nvidia
 
 ---
 # Taints and tolerations example
@@ -323,3 +331,17 @@ spec:
 #
 # Note: Some affinity rules work best with multi-node clusters.
 # For single-node testing, observe the scheduling attempts in pod events.
+#
+# AKS Compatibility Notes:
+# - AKS automatically adds labels to nodes:
+#   - kubernetes.azure.com/agentpool: <pool-name>
+#   - kubernetes.azure.com/cluster: <cluster-name>
+#   - kubernetes.azure.com/mode: system|user
+#   - kubernetes.azure.com/node-image-version: <version>
+#   - topology.kubernetes.io/zone: <azure-zone> (if using availability zones)
+#   - kubernetes.azure.com/accelerator: nvidia (for GPU nodes)
+# - AKS node pools support taints via: az aks nodepool add --node-taints key=value:effect
+# - System node pools have taint: CriticalAddonsOnly=true:NoSchedule
+# - Use agentpool label for node pool targeting: kubernetes.azure.com/agentpool=<pool-name>
+# - Availability zones (topology.kubernetes.io/zone) work with AKS zone-redundant clusters
+# - For spot instances, AKS adds: kubernetes.azure.com/scalesetpriority=spot

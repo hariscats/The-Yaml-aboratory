@@ -22,9 +22,20 @@ metadata:
 # Provisioner varies by environment:
 # - kubernetes.io/aws-ebs (AWS)
 # - kubernetes.io/gce-pd (GCP)
-# - kubernetes.io/azure-disk (Azure)
+# - kubernetes.io/azure-disk (Azure - legacy)
+# - disk.csi.azure.com (Azure - CSI driver, recommended)
+# - file.csi.azure.com (Azure Files - CSI driver)
 # - k8s.io/minikube-hostpath (Minikube)
 # - rancher.io/local-path (k3s/k3d)
+#
+# AKS Built-in Storage Classes:
+# - managed-csi (default): Azure Disk with CSI driver, Standard SSD LRS
+# - managed-csi-premium: Azure Disk with CSI driver, Premium SSD LRS
+# - azurefile-csi: Azure Files with CSI driver, Standard
+# - azurefile-csi-premium: Azure Files with CSI driver, Premium
+# - managed (legacy): Azure Disk with in-tree driver (deprecated)
+# - azurefile (legacy): Azure Files with in-tree driver (deprecated)
+#
 provisioner: kubernetes.io/no-provisioner  # Manual provisioning for demo
 volumeBindingMode: WaitForFirstConsumer
 # WaitForFirstConsumer delays binding until pod is scheduled
@@ -422,3 +433,44 @@ spec:
 # ✓ ConfigMap as volume
 # ✓ EmptyDir for temporary storage
 # ✓ Volume mounting and subPath
+#
+# AKS Compatibility Notes:
+# - Use AKS built-in storage classes instead of manual PV provisioning
+# - For production, use 'managed-csi' or 'managed-csi-premium' storage classes
+# - Azure Disk (managed-csi): ReadWriteOnce only, best for databases
+# - Azure Files (azurefile-csi): Supports ReadWriteMany, good for shared storage
+# - hostPath volumes are NOT recommended in AKS (node ephemeral, no persistence)
+# - Enable CSI drivers (enabled by default in AKS 1.21+)
+#
+# AKS Storage Examples:
+# ---
+# # Using AKS default storage class (managed-csi)
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: azure-disk-pvc
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   storageClassName: managed-csi  # Or managed-csi-premium for premium SSD
+#   resources:
+#     requests:
+#       storage: 10Gi
+# ---
+# # Using Azure Files for ReadWriteMany
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: azure-files-pvc
+# spec:
+#   accessModes:
+#     - ReadWriteMany
+#   storageClassName: azurefile-csi  # Or azurefile-csi-premium
+#   resources:
+#     requests:
+#       storage: 10Gi
+#
+# Volume Expansion:
+# - Azure Disk CSI supports online expansion (no pod restart needed for AKS 1.21+)
+# - Azure Files supports expansion
+# - Edit PVC spec.resources.requests.storage to expand

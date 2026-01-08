@@ -156,3 +156,9 @@ spec:
 #
 # Note: Metrics server must be installed in your cluster for HPA to work
 # Install with: kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+#
+# AKS Compatibility Notes:
+# - AKS includes metrics-server by default, no additional installation required
+# - HPA works out of the box on AKS clusters
+# - For custom metrics, consider using Azure Monitor metrics adapter or KEDA
+# - Ensure your AKS cluster has sufficient node capacity for scaling
