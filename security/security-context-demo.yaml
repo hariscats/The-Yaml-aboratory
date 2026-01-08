@@ -370,3 +370,19 @@ stringData:
 # ✓ Store secrets properly
 # ✓ Enforce Pod Security Standards
 # ✓ Use AppArmor/SELinux when available
+#
+# AKS Compatibility Notes:
+# - Pod Security Standards (PSS): Fully supported in AKS 1.25+
+# - AppArmor: Supported on AKS nodes running Ubuntu (default OS)
+#   - runtime/default profile is available by default
+#   - Custom profiles require node configuration
+# - SELinux: Supported on AKS nodes running Azure Linux (Mariner)
+#   - Ubuntu nodes may have SELinux in permissive mode
+#   - Use Azure Linux node pools for full SELinux enforcement
+# - Seccomp: RuntimeDefault profile works on all AKS nodes
+# - For production AKS workloads, consider:
+#   - Azure Policy for Kubernetes (Gatekeeper/OPA integration)
+#   - Microsoft Defender for Containers
+#   - Azure Key Vault for secrets (via CSI driver)
+# - AKS-managed identities are preferred over service account tokens
+# - Enable Azure AD workload identity for pod-level Azure RBAC

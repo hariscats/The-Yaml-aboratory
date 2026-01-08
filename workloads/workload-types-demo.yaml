@@ -264,8 +264,11 @@ spec:
           mountPath: /var/log
           readOnly: true
         # Mount container logs
-        - name: varlibdockercontainers
-          mountPath: /var/lib/docker/containers
+        # Note: Path varies by container runtime:
+        # - Docker: /var/lib/docker/containers
+        # - containerd (AKS default): /var/log/pods or /var/log/containers
+        - name: containerlog
+          mountPath: /var/log/containers
           readOnly: true
 
         resources:
@@ -282,9 +285,12 @@ spec:
         hostPath:
           path: /var/log
           type: Directory
-      - name: varlibdockercontainers
+      # Container logs location
+      # AKS uses containerd, so logs are at /var/log/containers
+      # For Docker-based clusters, use /var/lib/docker/containers
+      - name: containerlog
         hostPath:
-          path: /var/lib/docker/containers
+          path: /var/log/containers
           type: DirectoryOrCreate
 
 ---
@@ -526,3 +532,17 @@ spec:
 # ✓ Init containers - Pre-start initialization
 # ✓ Lifecycle hooks - postStart and preStop
 # ✓ Sidecar pattern - Multi-container cooperation
+#
+# AKS Compatibility Notes:
+# - All workload types are fully supported in AKS
+# - AKS uses containerd runtime (not Docker), container logs are at /var/log/containers
+# - DaemonSets can run on system node pools with appropriate tolerations
+# - CronJob timeZone feature requires AKS 1.27+ (Kubernetes 1.27+)
+# - For production logging, consider Azure Monitor Container Insights instead of custom DaemonSets
+# - StatefulSet PVCs will use AKS default storage class (managed-csi) if not specified
+# - Jobs/CronJobs work well with AKS Virtual Nodes (Azure Container Instances) for burst workloads
+# - For system-critical DaemonSets, add toleration for CriticalAddonsOnly taint:
+#   tolerations:
+#   - key: CriticalAddonsOnly
+#     operator: Exists
+# - AKS supports native sidecar containers (Kubernetes 1.28+) for improved lifecycle management

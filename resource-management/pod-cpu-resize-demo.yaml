@@ -1,3 +1,30 @@
+---
+# In-Place Pod Vertical Scaling (CPU Resize) Demonstration
+# This demo shows how to resize pod CPU/memory without restarting the container
+# Kubernetes Version: 1.27+ (requires InPlacePodVerticalScaling feature gate)
+# Feature: Allows changing CPU/memory limits on running pods
+#
+# IMPORTANT: This feature requires the InPlacePodVerticalScaling feature gate
+# to be enabled on both kube-apiserver and kubelet.
+#
+# AKS Compatibility Notes:
+# - As of early 2024, InPlacePodVerticalScaling is NOT enabled by default in AKS
+# - This is a beta feature in Kubernetes 1.27+ that AKS may not have enabled
+# - Check AKS release notes for feature gate availability in your version
+# - Alternative for AKS: Use Vertical Pod Autoscaler (VPA) with recreate mode
+#   or update deployment specs to trigger rolling updates
+# - For production workloads, consider using VPA or HPA instead
+# - To verify if the feature is available:
+#   kubectl get --raw /api/v1/pods | grep -i resize
+#
+# Testing Instructions:
+# 1. Apply the manifest: kubectl apply -f pod-cpu-resize-demo.yaml
+# 2. Check pod status: kubectl get pod reactor-cpu-resize-demo
+# 3. Watch the cpu-monitor logs: kubectl logs -f reactor-cpu-resize-demo -c cpu-monitor
+# 4. Resize CPU (if feature is enabled):
+#    kubectl patch pod reactor-cpu-resize-demo --patch '{"spec":{"containers":[{"name":"reactor","resources":{"limits":{"cpu":"200m"},"requests":{"cpu":"200m"}}}]}}'
+# 5. Observe the cpu-monitor container showing updated CPU quota
+#
 apiVersion: v1
 kind: Pod
 metadata:

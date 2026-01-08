@@ -299,3 +299,15 @@ spec:
 #
 # Note: Your cluster must have a CNI plugin that supports Network Policies
 # (Calico, Cilium, Weave Net, etc.). Kind and Minikube support NetworkPolicy.
+#
+# AKS Compatibility Notes:
+# - AKS requires Azure CNI with network policy enabled (Azure or Calico policy)
+# - Network policies are NOT enabled by default in AKS
+# - To create an AKS cluster with network policy:
+#   az aks create --network-plugin azure --network-policy azure ...
+#   OR
+#   az aks create --network-plugin azure --network-policy calico ...
+# - Azure Network Policy: Best for Azure-native integration
+# - Calico Network Policy: More features, cross-platform compatibility
+# - Existing clusters without network policy cannot have it enabled retroactively
+# - For kubenet clusters, only Calico network policy is supported
