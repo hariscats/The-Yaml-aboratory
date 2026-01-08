@@ -1,0 +1,325 @@
+---
+# Pod Affinity and Anti-Affinity Demonstration
+# This demo shows how to control pod placement using affinity rules
+# Kubernetes Version: 1.18+
+# Feature: Affinity rules allow you to constrain which nodes pods can be scheduled on
+
+# Namespace for demo
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scheduling-demo
+  labels:
+    purpose: scheduling-demo
+
+---
+# Cache pod - will be used as anchor for affinity rules
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cache-pod
+  namespace: scheduling-demo
+  labels:
+    app: cache
+    tier: backend
+    zone: zone-a
+spec:
+  containers:
+  - name: redis
+    image: redis:7-alpine
+    ports:
+    - containerPort: 6379
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+  # Node affinity: Schedule cache on nodes with SSD storage
+  affinity:
+    nodeAffinity:
+      # REQUIRED: Pod will only schedule on nodes matching this rule
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          # This is an example - you would label your nodes with:
+          # kubectl label nodes <node-name> disktype=ssd
+          - key: kubernetes.io/os
+            operator: In
+            values:
+            - linux
+
+      # PREFERRED: Scheduler will try to place on matching nodes, but not required
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100  # Priority weight (1-100)
+        preference:
+          matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+
+---
+# Application pods with pod affinity
+# These pods prefer to be co-located with the cache pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: scheduling-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-app
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: web-app
+        tier: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+      # Pod affinity: Prefer to run on same node as cache pod
+      affinity:
+        podAffinity:
+          # PREFERRED: Try to schedule near cache pods, but not mandatory
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              # Look for pods with these labels
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cache
+              # Topology key defines "nearness"
+              # "kubernetes.io/hostname" = same node
+              # "topology.kubernetes.io/zone" = same availability zone
+              topologyKey: kubernetes.io/hostname
+
+        # Pod anti-affinity: Spread web-app pods across nodes
+        podAntiAffinity:
+          # PREFERRED: Try to avoid scheduling on nodes with other web-app pods
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - web-app
+              topologyKey: kubernetes.io/hostname
+
+---
+# Database pods with required anti-affinity
+# These pods MUST be on different nodes for high availability
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: scheduling-demo
+spec:
+  serviceName: database
+  replicas: 3
+  selector:
+    matchLabels:
+      app: database
+      tier: data
+  template:
+    metadata:
+      labels:
+        app: database
+        tier: data
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_PASSWORD
+          value: demo-password
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+      # REQUIRED anti-affinity: Database pods MUST be on different nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - database
+            # Each database pod must be on a different node
+            topologyKey: kubernetes.io/hostname
+
+---
+# Example with topology spread constraints
+# Modern alternative to pod anti-affinity for even distribution
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+  namespace: scheduling-demo
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: api-server
+  template:
+    metadata:
+      labels:
+        app: api-server
+        tier: backend
+    spec:
+      containers:
+      - name: api
+        image: nginx:1.25
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+      # Topology spread constraints: Evenly distribute pods
+      topologySpreadConstraints:
+      # Spread across availability zones
+      - maxSkew: 1  # Maximum difference in pod count between zones
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway  # Or "DoNotSchedule" for strict enforcement
+        labelSelector:
+          matchLabels:
+            app: api-server
+
+      # Spread across nodes
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: api-server
+
+---
+# Node selector example - simplest form of node affinity
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-workload
+  namespace: scheduling-demo
+  labels:
+    app: ml-training
+spec:
+  containers:
+  - name: trainer
+    image: tensorflow/tensorflow:latest-gpu
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+        nvidia.com/gpu: 1  # Request GPU resource
+
+  # Simple node selector: Only schedule on nodes with GPU
+  nodeSelector:
+    accelerator: nvidia-gpu
+    # To use this, label your GPU nodes:
+    # kubectl label nodes <node-name> accelerator=nvidia-gpu
+
+---
+# Taints and tolerations example
+# This pod can tolerate a tainted node
+apiVersion: v1
+kind: Pod
+metadata:
+  name: monitoring-agent
+  namespace: scheduling-demo
+  labels:
+    app: monitoring
+spec:
+  containers:
+  - name: agent
+    image: prom/node-exporter:latest
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  # Tolerations: Allow scheduling on tainted nodes
+  tolerations:
+  # This pod can run on nodes with "node-role.kubernetes.io/control-plane" taint
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+  # Tolerate nodes marked for maintenance
+  - key: maintenance
+    operator: Equal
+    value: "true"
+    effect: NoExecute
+    # Pod will be evicted after 300 seconds if node is tainted
+    tolerationSeconds: 300
+
+---
+# How to test scheduling:
+#
+# 1. Apply the manifests:
+#    kubectl apply -f affinity-demo.yaml
+#
+# 2. Verify pods are running:
+#    kubectl get pods -n scheduling-demo -o wide
+#    # Note which nodes each pod is running on
+#
+# 3. Check pod affinity results:
+#    # Web-app pods should prefer to be on same node as cache-pod
+#    kubectl get pod cache-pod -n scheduling-demo -o jsonpath='{.spec.nodeName}'
+#    kubectl get pods -n scheduling-demo -l app=web-app -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}'
+#
+# 4. Check anti-affinity results:
+#    # Database pods should be on different nodes (if you have multiple nodes)
+#    kubectl get pods -n scheduling-demo -l app=database -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}'
+#
+# 5. Describe pod to see scheduling details:
+#    kubectl describe pod <pod-name> -n scheduling-demo
+#    # Look for "Events" section showing scheduling decisions
+#
+# 6. Test topology spread:
+#    kubectl get pods -n scheduling-demo -l app=api-server -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}'
+#    # Pods should be evenly distributed across nodes
+#
+# 7. Label a node to test node affinity:
+#    kubectl label nodes <node-name> disktype=ssd
+#    # Delete and recreate cache-pod to see it prefer the SSD node
+#
+# 8. Cleanup:
+#    kubectl delete namespace scheduling-demo
+#
+# Note: Some affinity rules work best with multi-node clusters.
+# For single-node testing, observe the scheduling attempts in pod events.

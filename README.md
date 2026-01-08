@@ -16,7 +16,7 @@ Demonstrations of CPU, memory, and resource allocation features:
 - Resource management best practices
 
 **Current Demos**:
-- `pod-cpu-resize-demo.yaml` - In-place CPU resize with resizePolicy
+- `pod-cpu-resize-demo.yaml` - In-place CPU resize with resizePolicy and monitoring
 
 ### 🌐 Networking
 **Location**: `networking/`
@@ -28,6 +28,9 @@ Network policies, services, ingress, and connectivity:
 - DNS and service discovery
 - CNI plugins and configurations
 
+**Current Demos**:
+- `network-policy-demo.yaml` - Network policies for pod-to-pod communication control
+
 ### 💾 Storage
 **Location**: `storage/`
 
@@ -37,6 +40,9 @@ Persistent volumes, storage classes, and data management:
 - StatefulSets with persistent storage
 - Volume snapshots and cloning
 - CSI driver demonstrations
+
+**Current Demos**:
+- `persistent-storage-demo.yaml` - PV, PVC, StorageClass, and StatefulSet storage patterns
 
 ### 🔒 Security
 **Location**: `security/`
@@ -49,6 +55,9 @@ Security contexts, policies, and hardening techniques:
 - Secrets and ConfigMap management
 - Service accounts and identity
 
+**Current Demos**:
+- `security-context-demo.yaml` - Pod Security Standards and SecurityContext best practices
+
 ### 📅 Scheduling
 **Location**: `scheduling/`
 
@@ -58,6 +67,9 @@ Pod placement, affinity, and scheduling controls:
 - Taints and tolerations
 - Priority classes
 - Topology spread constraints
+
+**Current Demos**:
+- `affinity-demo.yaml` - Pod/node affinity, anti-affinity, and topology spread constraints
 
 ### 📈 Observability
 **Location**: `observability/`
@@ -69,6 +81,9 @@ Monitoring, logging, and debugging:
 - Debug containers
 - Events and troubleshooting
 
+**Current Demos**:
+- `health-probes-demo.yaml` - Liveness, readiness, and startup probes configuration
+
 ### ⚡ Autoscaling
 **Location**: `autoscaling/`
 
@@ -79,6 +94,9 @@ Horizontal and vertical pod autoscaling:
 - Custom metrics and scaling policies
 - KEDA (Kubernetes Event-Driven Autoscaling)
 
+**Current Demos**:
+- `hpa-demo.yaml` - Horizontal Pod Autoscaler with CPU/memory metrics and scaling policies
+
 ### 🚀 Workloads
 **Location**: `workloads/`
 
@@ -88,6 +106,9 @@ Different workload types and patterns:
 - DaemonSets for node-level services
 - Jobs and CronJobs
 - Init containers and lifecycle hooks
+
+**Current Demos**:
+- `workload-types-demo.yaml` - Deployment, StatefulSet, DaemonSet, Job, CronJob, and multi-container patterns
 
 ## Getting Started
 
@@ -136,19 +157,26 @@ Each demo should include:
 
 | Category | Demo | Kubernetes Version | Description |
 |----------|------|-------------------|-------------|
-| Resource Management | [CPU Resize](resource-management/) | 1.27+ | In-place pod CPU resize without restart |
-
-*More demos coming soon!*
+| Resource Management | [CPU Resize](resource-management/pod-cpu-resize-demo.yaml) | 1.27+ | In-place pod CPU resize without restart |
+| Observability | [Health Probes](observability/health-probes-demo.yaml) | 1.16+ | Liveness, readiness, and startup probes |
+| Autoscaling | [HPA](autoscaling/hpa-demo.yaml) | 1.23+ | Horizontal Pod Autoscaler with CPU/memory metrics |
+| Networking | [Network Policies](networking/network-policy-demo.yaml) | 1.7+ | Pod-to-pod communication control with network policies |
+| Scheduling | [Affinity Rules](scheduling/affinity-demo.yaml) | 1.18+ | Pod/node affinity, anti-affinity, and topology spread |
+| Security | [Security Context](security/security-context-demo.yaml) | 1.25+ | Pod Security Standards and SecurityContext hardening |
+| Storage | [Persistent Storage](storage/persistent-storage-demo.yaml) | 1.21+ | PV, PVC, StorageClass, and StatefulSet storage |
+| Workloads | [Workload Types](workloads/workload-types-demo.yaml) | 1.21+ | Deployment, StatefulSet, DaemonSet, Job, CronJob patterns |
 
 ## Roadmap
 
 Upcoming demos:
 - Memory resize demonstrations
-- Network policy examples
-- StatefulSet with persistent storage
-- HPA with custom metrics
-- Pod Security Standards enforcement
-- Multi-container pod patterns
+- VPA (Vertical Pod Autoscaler) examples
+- KEDA event-driven autoscaling
+- Ingress controllers and routing
+- Service mesh integration
+- RBAC policy examples
+- Volume snapshots and cloning
+- Custom metrics for HPA
 
 ## License
 

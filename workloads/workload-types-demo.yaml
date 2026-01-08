@@ -1,0 +1,528 @@
+---
+# Kubernetes Workload Types Demonstration
+# This demo shows different workload types and their use cases
+# Kubernetes Version: 1.21+
+# Feature: Different workload controllers for different application patterns
+
+# Namespace for demo
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workloads-demo
+  labels:
+    purpose: workloads-demo
+
+---
+# 1. DEPLOYMENT - Stateless applications
+# Best for: Web servers, API servers, stateless microservices
+# Features: Rolling updates, rollbacks, replica management
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-deployment
+  namespace: workloads-demo
+  labels:
+    app: web
+spec:
+  # Number of pod replicas
+  replicas: 3
+
+  # Selector must match template labels
+  selector:
+    matchLabels:
+      app: web
+
+  # Rolling update strategy
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Maximum additional pods during update
+      maxSurge: 1
+      # Maximum unavailable pods during update
+      maxUnavailable: 1
+
+  # Pod template
+  template:
+    metadata:
+      labels:
+        app: web
+        version: v1
+    spec:
+      # Init container - runs before main containers
+      # Use for: Setup tasks, wait for dependencies, migrations
+      initContainers:
+      - name: init-setup
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - |
+          echo "Initializing web server..."
+          echo "Checking dependencies..."
+          sleep 3
+          echo "Init complete!"
+
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+          name: http
+
+        # Lifecycle hooks
+        lifecycle:
+          # postStart: Executes immediately after container creation
+          # Not guaranteed to run before container ENTRYPOINT
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - echo "Container started at $(date)" > /tmp/startup.log
+
+          # preStop: Executes before container termination
+          # Useful for graceful shutdown
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "Shutting down gracefully..."
+                nginx -s quit
+                sleep 5
+
+        # Health probes
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+      # Termination grace period for preStop hook
+      terminationGracePeriodSeconds: 30
+
+---
+# Service for Deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+  namespace: workloads-demo
+spec:
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: http
+  type: ClusterIP
+
+---
+# 2. STATEFULSET - Stateful applications
+# Best for: Databases, distributed systems, applications needing stable identity
+# Features: Stable network identity, ordered deployment/scaling, persistent storage
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: workloads-demo
+spec:
+  # Service name for stable network identity
+  serviceName: database
+
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: database
+
+  # Pod management policy:
+  # - OrderedReady: Deploy/delete pods in order (default)
+  # - Parallel: Deploy/delete pods in parallel
+  podManagementPolicy: OrderedReady
+
+  # Update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Partition for canary updates (update pods >= partition)
+      partition: 0
+
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+
+        env:
+        - name: POSTGRES_PASSWORD
+          value: demo-password
+        # Each pod gets unique hostname: database-0, database-1, database-2
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+  # Volume claim template - creates PVC for each replica
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+
+---
+# Headless service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: workloads-demo
+spec:
+  clusterIP: None
+  selector:
+    app: database
+  ports:
+  - port: 5432
+    name: postgres
+
+---
+# 3. DAEMONSET - Node-level services
+# Best for: Logging agents, monitoring, node maintenance
+# Features: Runs one pod per node automatically
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-collector
+  namespace: workloads-demo
+spec:
+  selector:
+    matchLabels:
+      app: log-collector
+
+  # Update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Maximum unavailable during update
+      maxUnavailable: 1
+
+  template:
+    metadata:
+      labels:
+        app: log-collector
+    spec:
+      # Tolerate control-plane taints to run on all nodes
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+      containers:
+      - name: fluentd
+        image: fluent/fluentd:v1.16-1
+        volumeMounts:
+        # Mount host logs directory
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        # Mount container logs
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            cpu: 200m
+            memory: 400Mi
+
+      volumes:
+      # Host path volumes to access node logs
+      - name: varlog
+        hostPath:
+          path: /var/log
+          type: Directory
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+          type: DirectoryOrCreate
+
+---
+# 4. JOB - Run-to-completion tasks
+# Best for: Batch processing, one-time tasks, migrations
+# Features: Ensures task completes successfully
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-migration
+  namespace: workloads-demo
+spec:
+  # Number of times to retry if pod fails
+  backoffLimit: 3
+
+  # Number of pods to run in parallel
+  parallelism: 1
+
+  # Total number of successful completions needed
+  completions: 1
+
+  # Time to keep completed job (cleaned up after TTL expires)
+  ttlSecondsAfterFinished: 100
+
+  template:
+    metadata:
+      labels:
+        app: migration
+    spec:
+      # RestartPolicy for Jobs must be Never or OnFailure
+      restartPolicy: Never
+
+      initContainers:
+      - name: wait-for-db
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for database to be ready..."
+          until nc -z database-0.database.workloads-demo.svc.cluster.local 5432; do
+            echo "Database not ready, waiting..."
+            sleep 2
+          done
+          echo "Database is ready!"
+
+      containers:
+      - name: migration
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "Running database migration..."
+          sleep 5
+          echo "Migration completed successfully!"
+          # In real scenario, you would run:
+          # psql -h database-0.database -U postgres -f /migrations/schema.sql
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+---
+# 5. CRONJOB - Scheduled jobs
+# Best for: Periodic tasks, backups, reports, cleanup jobs
+# Features: Runs jobs on a schedule (cron format)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-job
+  namespace: workloads-demo
+spec:
+  # Schedule in cron format (minute hour day month weekday)
+  # This runs daily at 2:00 AM
+  schedule: "0 2 * * *"
+
+  # Timezone for schedule (Kubernetes 1.27+)
+  # timeZone: "America/New_York"
+
+  # How to handle concurrent job runs:
+  # - Allow: Allow concurrent jobs (default)
+  # - Forbid: Skip new run if previous still running
+  # - Replace: Cancel old run and start new one
+  concurrencyPolicy: Forbid
+
+  # Number of successful job history to keep
+  successfulJobsHistoryLimit: 3
+
+  # Number of failed job history to keep
+  failedJobsHistoryLimit: 1
+
+  # Deadline for starting job (if missed, count as failed)
+  startingDeadlineSeconds: 300
+
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400  # Clean up after 24 hours
+
+      template:
+        metadata:
+          labels:
+            app: backup
+        spec:
+          restartPolicy: OnFailure
+
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            command:
+            - sh
+            - -c
+            - |
+              echo "Starting backup at $(date)"
+              # Simulate backup process
+              sleep 10
+              echo "Backup completed at $(date)"
+              # In real scenario:
+              # pg_dump -h database-0.database -U postgres > /backup/db-$(date +%Y%m%d).sql
+
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+
+---
+# 6. Multi-container pod pattern: Sidecar
+# Demonstrates sidecar pattern with main app + helper container
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sidecar-demo
+  namespace: workloads-demo
+  labels:
+    app: sidecar-demo
+spec:
+  # Shared volume between containers
+  volumes:
+  - name: shared-logs
+    emptyDir: {}
+
+  containers:
+  # Main application container
+  - name: app
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - |
+      while true; do
+        echo "$(date): Application log entry" >> /var/log/app.log
+        sleep 5
+      done
+    volumeMounts:
+    - name: shared-logs
+      mountPath: /var/log
+
+  # Sidecar container - processes logs from main container
+  - name: log-processor
+    image: busybox:latest
+    command:
+    - sh
+    - -c
+    - |
+      echo "Log processor started"
+      tail -f /var/log/app.log | while read line; do
+        echo "[PROCESSED] $line"
+      done
+    volumeMounts:
+    - name: shared-logs
+      mountPath: /var/log
+
+---
+# How to test workloads:
+#
+# 1. Apply all manifests:
+#    kubectl apply -f workload-types-demo.yaml
+#
+# 2. Test Deployment:
+#    kubectl get deployment -n workloads-demo
+#    kubectl get pods -n workloads-demo -l app=web
+#    # Test rolling update:
+#    kubectl set image deployment/web-deployment nginx=nginx:1.26 -n workloads-demo
+#    kubectl rollout status deployment/web-deployment -n workloads-demo
+#    # Rollback:
+#    kubectl rollout undo deployment/web-deployment -n workloads-demo
+#
+# 3. Test StatefulSet:
+#    kubectl get statefulset -n workloads-demo
+#    kubectl get pods -n workloads-demo -l app=database
+#    # Note stable pod names: database-0, database-1, database-2
+#    # Test stable network identity:
+#    kubectl run -it --rm debug --image=busybox --restart=Never -n workloads-demo -- \
+#      nslookup database-0.database.workloads-demo.svc.cluster.local
+#
+# 4. Test DaemonSet:
+#    kubectl get daemonset -n workloads-demo
+#    kubectl get pods -n workloads-demo -l app=log-collector -o wide
+#    # Should see one pod per node
+#
+# 5. Test Job:
+#    kubectl get job -n workloads-demo
+#    kubectl logs -n workloads-demo job/database-migration
+#    # Job should complete successfully
+#
+# 6. Test CronJob:
+#    kubectl get cronjob -n workloads-demo
+#    # Trigger manual run:
+#    kubectl create job --from=cronjob/backup-job manual-backup -n workloads-demo
+#    kubectl logs -n workloads-demo job/manual-backup
+#
+# 7. Test lifecycle hooks:
+#    kubectl logs -n workloads-demo deployment/web-deployment
+#    POD=$(kubectl get pod -n workloads-demo -l app=web -o jsonpath='{.items[0].metadata.name}')
+#    kubectl exec -n workloads-demo $POD -- cat /tmp/startup.log
+#
+# 8. Test sidecar pattern:
+#    kubectl logs -n workloads-demo sidecar-demo -c app
+#    kubectl logs -n workloads-demo sidecar-demo -c log-processor
+#    # Should see processed logs from sidecar
+#
+# 9. Cleanup:
+#    kubectl delete namespace workloads-demo
+#
+# Workload Types Summary:
+# ✓ Deployment - Stateless apps with rolling updates
+# ✓ StatefulSet - Stateful apps with stable identity
+# ✓ DaemonSet - One pod per node
+# ✓ Job - Run-to-completion tasks
+# ✓ CronJob - Scheduled periodic tasks
+# ✓ Init containers - Pre-start initialization
+# ✓ Lifecycle hooks - postStart and preStop
+# ✓ Sidecar pattern - Multi-container cooperation

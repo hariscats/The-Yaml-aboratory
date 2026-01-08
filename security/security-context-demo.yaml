@@ -1,0 +1,372 @@
+---
+# Security Context and Pod Security Standards Demonstration
+# This demo shows various security hardening techniques for Kubernetes pods
+# Kubernetes Version: 1.25+
+# Feature: SecurityContext defines privilege and access control settings for pods/containers
+
+# Namespace with Pod Security Standards enforcement
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security-demo
+  labels:
+    # Pod Security Standards (PSS) enforcement levels:
+    # - privileged: Unrestricted (default)
+    # - baseline: Minimally restrictive, prevents known privilege escalations
+    # - restricted: Heavily restricted, follows hardening best practices
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# Example 1: Insecure pod (will be blocked by restricted PSS)
+# This is commented out because it violates Pod Security Standards
+#
+# apiVersion: v1
+# kind: Pod
+# metadata:
+#   name: insecure-pod
+#   namespace: security-demo
+# spec:
+#   containers:
+#   - name: app
+#     image: nginx:1.25
+#     securityContext:
+#       privileged: true  # VIOLATION: privileged containers not allowed
+#       runAsUser: 0      # VIOLATION: running as root not allowed
+
+---
+# Example 2: Secure pod following best practices
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secure-pod
+  namespace: security-demo
+  labels:
+    app: secure-app
+spec:
+  # Pod-level security context
+  # These settings apply to all containers unless overridden
+  securityContext:
+    # Run as non-root user (UID 1000)
+    runAsUser: 1000
+    runAsGroup: 3000
+    # Ensure container runs as non-root
+    runAsNonRoot: true
+    # Set filesystem group for volumes
+    fsGroup: 2000
+    # Set supplemental groups
+    supplementalGroups: [4000, 5000]
+    # Set seccomp profile to restrict system calls
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+  - name: app
+    image: nginx:1.25
+    ports:
+    - containerPort: 8080
+
+    # Container-level security context
+    # Overrides pod-level settings for this container
+    securityContext:
+      # Prevent privilege escalation (e.g., via setuid binaries)
+      allowPrivilegeEscalation: false
+
+      # Drop all capabilities and add only required ones
+      capabilities:
+        drop:
+        - ALL
+        add:
+        # Only add specific capabilities if needed
+        # - NET_BIND_SERVICE  # Bind to ports < 1024
+        # - CHOWN             # Change file ownership
+
+      # Make root filesystem read-only
+      # Application can only write to mounted volumes
+      readOnlyRootFilesystem: true
+
+      # Run as specific non-root user
+      runAsUser: 1000
+      runAsNonRoot: true
+
+    # Volume mounts for writable directories
+    volumeMounts:
+    - name: cache
+      mountPath: /var/cache/nginx
+    - name: run
+      mountPath: /var/run
+    - name: tmp
+      mountPath: /tmp
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  volumes:
+  # EmptyDir volumes for writable directories
+  - name: cache
+    emptyDir: {}
+  - name: run
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
+
+---
+# Example 3: Pod with AppArmor profile (Linux security module)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: apparmor-pod
+  namespace: security-demo
+  annotations:
+    # Apply AppArmor profile to container
+    # Options: runtime/default, localhost/<profile-name>, unconfined
+    container.apparmor.security.beta.kubernetes.io/app: runtime/default
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+  - name: app
+    image: nginx:1.25
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+      runAsUser: 1000
+      runAsNonRoot: true
+
+    volumeMounts:
+    - name: cache
+      mountPath: /var/cache/nginx
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  volumes:
+  - name: cache
+    emptyDir: {}
+
+---
+# Example 4: Pod with SELinux context
+apiVersion: v1
+kind: Pod
+metadata:
+  name: selinux-pod
+  namespace: security-demo
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsNonRoot: true
+    # SELinux options
+    seLinuxOptions:
+      # SELinux user, role, type, and level
+      level: "s0:c123,c456"
+      # type: "svirt_sandbox_file_t"
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+  - name: app
+    image: nginx:1.25
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+      runAsUser: 1000
+      runAsNonRoot: true
+
+    volumeMounts:
+    - name: data
+      mountPath: /data
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  volumes:
+  - name: data
+    emptyDir: {}
+
+---
+# Example 5: Deployment with security best practices
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-deployment
+  namespace: security-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: secure-api
+  template:
+    metadata:
+      labels:
+        app: secure-api
+    spec:
+      # Use a dedicated service account (not default)
+      serviceAccountName: secure-api-sa
+      # Prevent service account token auto-mounting if not needed
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        runAsNonRoot: true
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: api
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 8080
+          name: http
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsUser: 1000
+          runAsNonRoot: true
+
+        # Liveness and readiness probes
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /var/cache
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        env:
+        # Use secrets for sensitive data
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-credentials
+              key: api-key
+
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 100Mi
+      - name: cache
+        emptyDir:
+          sizeLimit: 200Mi
+
+---
+# Service Account for secure deployment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secure-api-sa
+  namespace: security-demo
+automountServiceAccountToken: false
+
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-credentials
+  namespace: security-demo
+type: Opaque
+stringData:
+  api-key: "demo-key-replace-with-real-secret"
+
+---
+# How to test security features:
+#
+# 1. Apply the manifests:
+#    kubectl apply -f security-context-demo.yaml
+#
+# 2. Verify Pod Security Standards enforcement:
+#    # Try to create a privileged pod (should be rejected):
+#    kubectl run privileged-test --image=nginx --namespace=security-demo --privileged=true
+#    # Should fail with: "pods 'privileged-test' is forbidden: violates PodSecurity 'restricted:latest'"
+#
+# 3. Verify pods are running as non-root:
+#    kubectl exec -n security-demo secure-pod -- id
+#    # Should show uid=1000 gid=3000 groups=2000,3000,4000,5000
+#
+# 4. Verify read-only root filesystem:
+#    kubectl exec -n security-demo secure-pod -- touch /test-file
+#    # Should fail with "Read-only file system"
+#
+#    kubectl exec -n security-demo secure-pod -- touch /tmp/test-file
+#    # Should succeed (/tmp is mounted as writable emptyDir)
+#
+# 5. Check security context in pod spec:
+#    kubectl get pod secure-pod -n security-demo -o yaml | grep -A 20 securityContext
+#
+# 6. Verify capabilities are dropped:
+#    kubectl exec -n security-demo secure-pod -- cat /proc/1/status | grep Cap
+#    # Should show minimal capabilities
+#
+# 7. Check seccomp profile:
+#    kubectl get pod secure-pod -n security-demo -o jsonpath='{.spec.securityContext.seccompProfile}'
+#
+# 8. View service account:
+#    kubectl get sa secure-api-sa -n security-demo
+#    kubectl describe deployment secure-deployment -n security-demo | grep "Service Account"
+#
+# 9. Cleanup:
+#    kubectl delete namespace security-demo
+#
+# Security Best Practices Demonstrated:
+# ✓ Run as non-root user
+# ✓ Read-only root filesystem
+# ✓ Drop all capabilities
+# ✓ Prevent privilege escalation
+# ✓ Use seccomp profiles
+# ✓ Set resource limits
+# ✓ Use dedicated service accounts
+# ✓ Store secrets properly
+# ✓ Enforce Pod Security Standards
+# ✓ Use AppArmor/SELinux when available

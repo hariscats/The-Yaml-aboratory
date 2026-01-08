@@ -1,0 +1,424 @@
+---
+# Persistent Storage Demonstration
+# This demo shows PersistentVolumes, PersistentVolumeClaims, and StatefulSets
+# Kubernetes Version: 1.21+
+# Feature: Persistent storage survives pod restarts and rescheduling
+
+# Namespace for demo
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage-demo
+  labels:
+    purpose: storage-demo
+
+---
+# Storage Class - Defines the type of storage
+# Different cloud providers have different storage classes
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-storage
+# Provisioner varies by environment:
+# - kubernetes.io/aws-ebs (AWS)
+# - kubernetes.io/gce-pd (GCP)
+# - kubernetes.io/azure-disk (Azure)
+# - k8s.io/minikube-hostpath (Minikube)
+# - rancher.io/local-path (k3s/k3d)
+provisioner: kubernetes.io/no-provisioner  # Manual provisioning for demo
+volumeBindingMode: WaitForFirstConsumer
+# WaitForFirstConsumer delays binding until pod is scheduled
+# Immediate binds PVC to PV immediately
+reclaimPolicy: Retain
+# Retain: Keep PV after PVC is deleted (manual cleanup)
+# Delete: Delete PV when PVC is deleted
+# Recycle: Deprecated - use Delete instead
+allowVolumeExpansion: true
+
+---
+# PersistentVolume - Physical storage resource
+# In production, these are often created automatically by StorageClass
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-manual-1
+  labels:
+    type: local
+spec:
+  # Storage capacity
+  capacity:
+    storage: 1Gi
+
+  # Access modes:
+  # - ReadWriteOnce (RWO): Mount by single node for read/write
+  # - ReadOnlyMany (ROX): Mount by multiple nodes for read-only
+  # - ReadWriteMany (RWX): Mount by multiple nodes for read/write
+  # - ReadWriteOncePod (RWOP): Mount by single pod (K8s 1.27+)
+  accessModes:
+    - ReadWriteOnce
+
+  # What happens when PVC is deleted
+  persistentVolumeReclaimPolicy: Retain
+
+  # Storage class name (must match PVC)
+  storageClassName: fast-storage
+
+  # Volume source - varies by environment
+  # For demo purposes using hostPath (not for production!)
+  hostPath:
+    path: /mnt/data/pv-1
+    type: DirectoryOrCreate
+
+  # Alternative volume sources:
+  # awsElasticBlockStore:
+  #   volumeID: vol-12345678
+  #   fsType: ext4
+  # gcePersistentDisk:
+  #   pdName: my-data-disk
+  #   fsType: ext4
+  # azureDisk:
+  #   diskName: my-disk
+  #   diskURI: /subscriptions/.../...
+  # nfs:
+  #   server: nfs-server.example.com
+  #   path: /exported/path
+
+---
+# PersistentVolume - Second volume for demo
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-manual-2
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: fast-storage
+  hostPath:
+    path: /mnt/data/pv-2
+    type: DirectoryOrCreate
+
+---
+# PersistentVolumeClaim - Request for storage
+# Pod uses PVC to claim a PV
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: database-pvc
+  namespace: storage-demo
+spec:
+  # Must match PV's storageClassName
+  storageClassName: fast-storage
+
+  # Access mode (must be supported by PV)
+  accessModes:
+    - ReadWriteOnce
+
+  # Storage request
+  resources:
+    requests:
+      storage: 1Gi
+
+  # Optional: Selector to choose specific PV
+  # selector:
+  #   matchLabels:
+  #     type: local
+
+---
+# Pod using PersistentVolumeClaim
+apiVersion: v1
+kind: Pod
+metadata:
+  name: database-pod
+  namespace: storage-demo
+  labels:
+    app: postgres
+spec:
+  containers:
+  - name: postgres
+    image: postgres:15-alpine
+    ports:
+    - containerPort: 5432
+      name: postgres
+
+    env:
+    - name: POSTGRES_PASSWORD
+      value: demo-password
+    - name: PGDATA
+      value: /var/lib/postgresql/data/pgdata
+
+    # Mount the PVC
+    volumeMounts:
+    - name: postgres-storage
+      mountPath: /var/lib/postgresql/data
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  volumes:
+  # Reference the PVC
+  - name: postgres-storage
+    persistentVolumeClaim:
+      claimName: database-pvc
+
+---
+# StatefulSet with dynamic volume provisioning
+# StatefulSet automatically creates PVCs for each replica
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web-stateful
+  namespace: storage-demo
+spec:
+  # Service name for stable network identity
+  serviceName: web-stateful
+
+  # Number of replicas
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: nginx-stateful
+
+  template:
+    metadata:
+      labels:
+        app: nginx-stateful
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+          name: web
+
+        # Mount the dynamically created PVC
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+  # Volume claim templates - creates PVC for each replica
+  # These PVCs are NOT deleted when StatefulSet is deleted
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: fast-storage
+      resources:
+        requests:
+          storage: 500Mi
+
+---
+# Headless Service for StatefulSet
+# Provides stable network identity for each pod
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-stateful
+  namespace: storage-demo
+spec:
+  # clusterIP: None makes this a headless service
+  clusterIP: None
+  selector:
+    app: nginx-stateful
+  ports:
+  - port: 80
+    name: web
+
+---
+# ConfigMap as a volume example
+# Not persistent storage, but commonly used
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: storage-demo
+data:
+  app.conf: |
+    server {
+      listen 8080;
+      server_name localhost;
+      root /usr/share/nginx/html;
+    }
+  database.conf: |
+    host=database-service
+    port=5432
+    database=myapp
+
+---
+# Pod using ConfigMap as volume
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-config
+  namespace: storage-demo
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25-alpine
+    volumeMounts:
+    # Mount entire ConfigMap
+    - name: config-volume
+      mountPath: /etc/config
+    # Mount specific key from ConfigMap
+    - name: app-config-file
+      mountPath: /etc/nginx/conf.d/app.conf
+      subPath: app.conf
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  volumes:
+  # Mount all keys as files
+  - name: config-volume
+    configMap:
+      name: app-config
+
+  # Mount specific key as a file
+  - name: app-config-file
+    configMap:
+      name: app-config
+      items:
+      - key: app.conf
+        path: app.conf
+
+---
+# EmptyDir volume example
+# Temporary storage that exists only for pod lifetime
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shared-storage-pod
+  namespace: storage-demo
+spec:
+  containers:
+  # Writer container
+  - name: writer
+    image: busybox:latest
+    command:
+    - /bin/sh
+    - -c
+    - |
+      while true; do
+        echo "$(date): Hello from writer" >> /data/shared.log
+        sleep 5
+      done
+    volumeMounts:
+    - name: shared-data
+      mountPath: /data
+
+  # Reader container
+  - name: reader
+    image: busybox:latest
+    command:
+    - /bin/sh
+    - -c
+    - |
+      tail -f /data/shared.log
+    volumeMounts:
+    - name: shared-data
+      mountPath: /data
+
+  volumes:
+  # EmptyDir - created when pod starts, deleted when pod is removed
+  - name: shared-data
+    emptyDir:
+      # Optional: Use memory-backed tmpfs
+      # medium: Memory
+      sizeLimit: 100Mi
+
+---
+# How to test persistent storage:
+#
+# 1. Create the storage directory on your node (if using hostPath):
+#    # On the node where pods will run:
+#    sudo mkdir -p /mnt/data/pv-1 /mnt/data/pv-2
+#    sudo chmod 777 /mnt/data/pv-1 /mnt/data/pv-2
+#
+# 2. Apply the manifests:
+#    kubectl apply -f persistent-storage-demo.yaml
+#
+# 3. Verify PVs and PVCs:
+#    kubectl get pv
+#    kubectl get pvc -n storage-demo
+#    # PVC should be "Bound" to a PV
+#
+# 4. Test data persistence with database-pod:
+#    # Write data to database
+#    kubectl exec -n storage-demo database-pod -- psql -U postgres -c "CREATE TABLE test (id INT, name TEXT);"
+#    kubectl exec -n storage-demo database-pod -- psql -U postgres -c "INSERT INTO test VALUES (1, 'persistent data');"
+#
+#    # Delete the pod
+#    kubectl delete pod database-pod -n storage-demo
+#
+#    # Recreate the pod (it will reuse the same PVC/PV)
+#    kubectl apply -f persistent-storage-demo.yaml
+#
+#    # Verify data survived
+#    kubectl exec -n storage-demo database-pod -- psql -U postgres -c "SELECT * FROM test;"
+#    # Should show: 1 | persistent data
+#
+# 5. Test StatefulSet stable storage:
+#    # Each replica has its own PVC
+#    kubectl get pvc -n storage-demo
+#    # Should see: www-web-stateful-0, www-web-stateful-1, www-web-stateful-2
+#
+#    # Write unique data to each replica
+#    for i in 0 1 2; do
+#      kubectl exec -n storage-demo web-stateful-$i -- sh -c "echo 'Pod $i data' > /usr/share/nginx/html/index.html"
+#    done
+#
+#    # Verify each pod has its own data
+#    for i in 0 1 2; do
+#      kubectl exec -n storage-demo web-stateful-$i -- cat /usr/share/nginx/html/index.html
+#    done
+#
+# 6. Test ConfigMap volume:
+#    kubectl exec -n storage-demo app-with-config -- ls /etc/config
+#    kubectl exec -n storage-demo app-with-config -- cat /etc/config/app.conf
+#
+# 7. Test EmptyDir shared volume:
+#    kubectl logs -n storage-demo shared-storage-pod -c reader
+#    # Should see logs written by writer container
+#
+# 8. Cleanup:
+#    kubectl delete namespace storage-demo
+#    # Note: PVCs created by StatefulSet volumeClaimTemplates must be deleted manually
+#    kubectl delete pvc -n storage-demo www-web-stateful-0 www-web-stateful-1 www-web-stateful-2
+#    kubectl get pv  # PVs with Retain policy will still exist
+#    kubectl delete pv pv-manual-1 pv-manual-2
+#
+# Storage Concepts Demonstrated:
+# ✓ PersistentVolume (PV) - Cluster storage resource
+# ✓ PersistentVolumeClaim (PVC) - Storage request
+# ✓ StorageClass - Dynamic provisioning
+# ✓ StatefulSet with volumeClaimTemplates
+# ✓ Access modes (RWO, ROX, RWX)
+# ✓ Reclaim policies (Retain, Delete)
+# ✓ ConfigMap as volume
+# ✓ EmptyDir for temporary storage
+# ✓ Volume mounting and subPath
