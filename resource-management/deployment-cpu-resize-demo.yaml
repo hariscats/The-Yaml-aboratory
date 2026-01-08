@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reactor-cpu-resize-demo
+  labels:
+    app: reactor
+    demo: cpu-resize
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: reactor
+      demo: cpu-resize
+  template:
+    metadata:
+      labels:
+        app: reactor
+        demo: cpu-resize
+    spec:
+      containers:
+      - name: reactor
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+        # Note: resizePolicy only works if InPlacePodVerticalScaling is enabled
+        # Without it, this deployment will use rolling updates instead
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+
+      - name: cpu-monitor
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting CPU quota monitor..."
+          while true; do
+            if [ -f /sys/fs/cgroup/cpu.max ]; then
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] CPU quota: $(cat /sys/fs/cgroup/cpu.max)"
+            else
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] cpu.max not found (checking legacy path)"
+              if [ -f /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then
+                QUOTA=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
+                PERIOD=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] CPU quota: $QUOTA/$PERIOD"
+              fi
+            fi
+            sleep 2
+          done
+        resources:
+          requests:
+            cpu: "10m"
+            memory: "32Mi"
+          limits:
+            cpu: "50m"
+            memory: "64Mi"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+
+      restartPolicy: Always

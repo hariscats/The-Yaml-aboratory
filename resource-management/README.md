@@ -9,6 +9,10 @@ The demo showcases how Kubernetes can resize container resources (CPU and memory
 ## Files
 
 - `pod-cpu-resize-demo.yaml` - Pod definition with resize policies configured
+- `demo-resize.sh` - Interactive demonstration script
+- `check-feature-gate.sh` - Script to verify if InPlacePodVerticalScaling is enabled
+- `TROUBLESHOOTING.md` - Comprehensive troubleshooting guide
+- `deployment-cpu-resize-demo.yaml` - Alternative deployment-based approach
 
 ## Pod Configuration
 
@@ -39,6 +43,13 @@ For Kubernetes 1.27-1.28 (alpha):
 For Kubernetes 1.29+ (beta), this may be enabled by default.
 
 ## Usage
+
+> **⚠️ IMPORTANT**: To resize an existing pod, you MUST use `kubectl patch`, NOT `kubectl apply`!
+>
+> Using `kubectl apply` on an existing pod will fail with:
+> ```
+> The Pod "reactor-cpu-resize-demo" is invalid: spec: Forbidden: pod updates may not change fields other than...
+> ```
 
 ### 1. Deploy the Pod
 
@@ -144,6 +155,25 @@ resizePolicy:
   restartPolicy: NotRequired
 - resourceName: memory
   restartPolicy: NotRequired
+```
+
+## Troubleshooting
+
+If you get an error like:
+```
+The Pod "reactor-cpu-resize-demo" is invalid: spec: Forbidden: pod updates may not change fields other than...
+```
+
+**The InPlacePodVerticalScaling feature gate is not enabled on your cluster.**
+
+See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** for:
+- How to check if the feature is enabled
+- How to enable it on different cluster types (minikube, kind, k3s, GKE, etc.)
+- Alternative solutions if you can't enable the feature gate
+
+Quick check:
+```bash
+./check-feature-gate.sh
 ```
 
 ## Cleanup
