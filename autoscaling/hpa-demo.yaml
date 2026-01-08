@@ -1,0 +1,158 @@
+---
+# Horizontal Pod Autoscaler (HPA) Demonstration
+# This demo shows automatic scaling of pods based on CPU utilization
+# Kubernetes Version: 1.23+
+# Feature: HPA automatically adjusts replica count based on observed metrics
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpa-demo-app
+  labels:
+    app: hpa-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hpa-demo
+  template:
+    metadata:
+      labels:
+        app: hpa-demo
+    spec:
+      containers:
+      - name: php-apache
+        image: registry.k8s.io/hpa-example
+        ports:
+        - containerPort: 80
+        resources:
+          # Resource requests are REQUIRED for HPA to work
+          # HPA calculates utilization as: (current usage / requested resources)
+          requests:
+            cpu: 200m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+
+---
+# Service to expose the deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: hpa-demo-service
+  labels:
+    app: hpa-demo
+spec:
+  selector:
+    app: hpa-demo
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  type: ClusterIP
+
+---
+# Horizontal Pod Autoscaler
+# Automatically scales pods between 2 and 10 replicas based on CPU utilization
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-demo
+spec:
+  # Target deployment to scale
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hpa-demo-app
+
+  # Minimum number of replicas
+  # HPA will never scale below this number
+  minReplicas: 2
+
+  # Maximum number of replicas
+  # HPA will never scale above this number
+  maxReplicas: 10
+
+  # Metrics to use for scaling decisions
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        # Scale when average CPU across all pods exceeds 50% of requested CPU
+        type: Utilization
+        averageUtilization: 50
+
+  # Memory-based scaling (additional metric)
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        # Scale when average memory across all pods exceeds 80% of requested memory
+        type: Utilization
+        averageUtilization: 80
+
+  # Scaling behavior configuration (optional)
+  # Controls how fast the HPA scales up or down
+  behavior:
+    scaleDown:
+      # How to select which policy to use when scaling down
+      selectPolicy: Min
+      policies:
+      # Don't remove more than 1 pod per 60 seconds
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      # Don't reduce by more than 10% of current pods per 60 seconds
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      # Wait at least 120 seconds between scale-down operations
+      stabilizationWindowSeconds: 120
+
+    scaleUp:
+      # How to select which policy to use when scaling up
+      selectPolicy: Max
+      policies:
+      # Can add up to 2 pods per 60 seconds
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      # Can increase by up to 50% of current pods per 60 seconds
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      # Wait at least 30 seconds between scale-up operations
+      stabilizationWindowSeconds: 30
+
+---
+# How to test this HPA:
+#
+# 1. Apply the manifests:
+#    kubectl apply -f hpa-demo.yaml
+#
+# 2. Verify HPA is working:
+#    kubectl get hpa hpa-demo --watch
+#
+# 3. Generate load to trigger scaling:
+#    kubectl run -i --tty load-generator --rm --image=busybox --restart=Never -- /bin/sh
+#    # Inside the container:
+#    while true; do wget -q -O- http://hpa-demo-service; done
+#
+# 4. Watch the scaling happen:
+#    kubectl get hpa hpa-demo --watch
+#    kubectl get pods -l app=hpa-demo --watch
+#
+# 5. Stop the load generator and watch scale down:
+#    # Exit the load generator with Ctrl+C
+#    kubectl get hpa hpa-demo --watch
+#
+# Expected behavior:
+# - Initially: 2 replicas running
+# - Under load: Scales up to handle increased CPU (up to 10 replicas)
+# - Load removed: Scales down gradually back to 2 replicas
+#
+# Note: Metrics server must be installed in your cluster for HPA to work
+# Install with: kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml

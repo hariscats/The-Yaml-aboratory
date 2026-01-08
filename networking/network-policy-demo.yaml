@@ -1,0 +1,301 @@
+---
+# Network Policy Demonstration
+# This demo shows how to control pod-to-pod communication using Network Policies
+# Kubernetes Version: 1.7+
+# Feature: Network policies act as a firewall for pods in your cluster
+
+# Namespace for demo isolation
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netpol-demo
+  labels:
+    purpose: network-policy-demo
+
+---
+# Frontend application (web server)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: netpol-demo
+  labels:
+    app: frontend
+    tier: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+      tier: web
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: web
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+---
+# Backend application (API server)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: netpol-demo
+  labels:
+    app: backend
+    tier: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+      tier: api
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: api
+    spec:
+      containers:
+      - name: api
+        image: nginx:1.25
+        ports:
+        - containerPort: 8080
+          name: api
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+---
+# Database (restricted access)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+  namespace: netpol-demo
+  labels:
+    app: database
+    tier: data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+      tier: data
+  template:
+    metadata:
+      labels:
+        app: database
+        tier: data
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_PASSWORD
+          value: demo-password
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+---
+# Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: netpol-demo
+spec:
+  selector:
+    app: frontend
+    tier: web
+  ports:
+  - port: 80
+    targetPort: http
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: netpol-demo
+spec:
+  selector:
+    app: backend
+    tier: api
+  ports:
+  - port: 8080
+    targetPort: api
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-service
+  namespace: netpol-demo
+spec:
+  selector:
+    app: database
+    tier: data
+  ports:
+  - port: 5432
+    targetPort: postgres
+
+---
+# Network Policy: Restrict database access to backend only
+# This policy ensures only pods with label "app=backend" can connect to the database
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-policy
+  namespace: netpol-demo
+spec:
+  # Apply this policy to pods with these labels
+  podSelector:
+    matchLabels:
+      app: database
+      tier: data
+
+  # Policy types to enforce
+  policyTypes:
+  - Ingress  # Control incoming traffic
+  - Egress   # Control outgoing traffic
+
+  # Ingress rules: Who can connect TO the database
+  ingress:
+  # Rule 1: Allow traffic from backend pods
+  - from:
+    # Only pods with these labels can connect
+    - podSelector:
+        matchLabels:
+          app: backend
+          tier: api
+    ports:
+    # Only on port 5432
+    - protocol: TCP
+      port: 5432
+
+  # Egress rules: Where the database can connect TO
+  egress:
+  # Rule 1: Allow DNS queries (required for name resolution)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# Network Policy: Allow frontend to backend communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-policy
+  namespace: netpol-demo
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+      tier: api
+
+  policyTypes:
+  - Ingress
+
+  ingress:
+  # Allow traffic from frontend pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+          tier: web
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Allow traffic from same backend pods (for internal communication)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backend
+          tier: api
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# Network Policy: Deny all ingress by default
+# This is a security best practice - explicitly deny everything, then allow what's needed
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: netpol-demo
+spec:
+  podSelector: {}  # Empty selector = applies to all pods in namespace
+  policyTypes:
+  - Ingress
+
+---
+# How to test Network Policies:
+#
+# 1. Apply the manifests:
+#    kubectl apply -f network-policy-demo.yaml
+#
+# 2. Verify pods are running:
+#    kubectl get pods -n netpol-demo
+#
+# 3. Test allowed connection (backend to database):
+#    BACKEND_POD=$(kubectl get pod -n netpol-demo -l app=backend -o jsonpath='{.items[0].metadata.name}')
+#    kubectl exec -n netpol-demo $BACKEND_POD -- nc -zv database-service 5432
+#    # Should succeed with "database-service (10.x.x.x:5432) open"
+#
+# 4. Test blocked connection (frontend to database):
+#    FRONTEND_POD=$(kubectl get pod -n netpol-demo -l app=frontend -o jsonpath='{.items[0].metadata.name}')
+#    kubectl exec -n netpol-demo $FRONTEND_POD -- nc -zv database-service 5432
+#    # Should timeout or fail (connection blocked by network policy)
+#
+# 5. Test frontend to backend (should work):
+#    kubectl exec -n netpol-demo $FRONTEND_POD -- nc -zv backend-service 8080
+#    # Should succeed
+#
+# 6. View network policies:
+#    kubectl get networkpolicy -n netpol-demo
+#    kubectl describe networkpolicy database-policy -n netpol-demo
+#
+# 7. Cleanup:
+#    kubectl delete namespace netpol-demo
+#
+# Expected behavior:
+# - Backend can connect to database (allowed by database-policy)
+# - Frontend can connect to backend (allowed by backend-policy)
+# - Frontend CANNOT connect to database (blocked by database-policy)
+# - External pods CANNOT connect to any service (blocked by default-deny-ingress)
+#
+# Note: Your cluster must have a CNI plugin that supports Network Policies
+# (Calico, Cilium, Weave Net, etc.). Kind and Minikube support NetworkPolicy.
