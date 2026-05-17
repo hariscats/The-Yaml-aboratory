@@ -1,0 +1,187 @@
+---
+# Ingress Routing Demonstration
+# This demo shows host and path based HTTP routing with Kubernetes Ingress.
+# Kubernetes Version: 1.19+
+# Feature: Routes external HTTP traffic to multiple services.
+#
+# Prerequisites:
+# - An Ingress controller such as ingress-nginx, Traefik, HAProxy, or AGIC
+# - DNS or local /etc/hosts entries pointing demo.local to the controller IP
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-demo
+  labels:
+    purpose: ingress-routing-demo
+
+---
+# Version 1 of the demo application.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-v1
+  namespace: ingress-demo
+  labels:
+    app: web
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: web
+        version: v1
+    spec:
+      containers:
+      - name: web
+        image: hashicorp/http-echo:1.0
+        args:
+        - "-text=Hello from web v1"
+        ports:
+        - containerPort: 5678
+          name: http
+        resources:
+          requests:
+            cpu: "25m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-v1
+  namespace: ingress-demo
+spec:
+  selector:
+    app: web
+    version: v1
+  ports:
+  - port: 80
+    targetPort: http
+
+---
+# Version 2 of the demo application.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-v2
+  namespace: ingress-demo
+  labels:
+    app: web
+    version: v2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: web
+        version: v2
+    spec:
+      containers:
+      - name: web
+        image: hashicorp/http-echo:1.0
+        args:
+        - "-text=Hello from web v2"
+        ports:
+        - containerPort: 5678
+          name: http
+        resources:
+          requests:
+            cpu: "25m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-v2
+  namespace: ingress-demo
+spec:
+  selector:
+    app: web
+    version: v2
+  ports:
+  - port: 80
+    targetPort: http
+
+---
+# Path based routing:
+# - http://demo.local/ routes to web-v1
+# - http://demo.local/v2 routes to web-v2
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-routing
+  namespace: ingress-demo
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: demo.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-v1
+            port:
+              number: 80
+      - path: /v2
+        pathType: Prefix
+        backend:
+          service:
+            name: web-v2
+            port:
+              number: 80
+
+---
+# Optional TLS configuration example.
+# Create the secret first, then uncomment the tls block in the Ingress:
+#
+# kubectl create secret tls demo-local-tls \
+#   --cert=demo.local.crt \
+#   --key=demo.local.key \
+#   -n ingress-demo
+#
+# spec:
+#   tls:
+#   - hosts:
+#     - demo.local
+#     secretName: demo-local-tls
+#
+# How to test Ingress routing:
+#
+# 1. Install an Ingress controller, then apply:
+#    kubectl apply -f ingress-routing-demo.yaml
+#
+# 2. Get the controller address:
+#    kubectl get ingress web-routing -n ingress-demo
+#
+# 3. Test with a Host header:
+#    curl -H "Host: demo.local" http://<INGRESS_ADDRESS>/
+#    curl -H "Host: demo.local" http://<INGRESS_ADDRESS>/v2
+#
+# 4. Cleanup:
+#    kubectl delete namespace ingress-demo
+#
+# AKS Compatibility Notes:
+# - Use ingress-nginx or Azure Application Gateway Ingress Controller (AGIC).
+# - For AGIC, set ingressClassName to the Application Gateway class.
+# - Use cert-manager or Application Gateway certificates for TLS automation.
+

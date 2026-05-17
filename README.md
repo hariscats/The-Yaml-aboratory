@@ -17,6 +17,7 @@ Demonstrations of CPU, memory, and resource allocation features:
 
 **Current Demos**:
 - `pod-cpu-resize-demo.yaml` - In-place CPU resize with resizePolicy and monitoring
+- `pod-memory-resize-demo.yaml` - In-place memory resize with cgroup monitoring
 
 ### 🌐 Networking
 **Location**: `networking/`
@@ -30,6 +31,7 @@ Network policies, services, ingress, and connectivity:
 
 **Current Demos**:
 - `network-policy-demo.yaml` - Network policies for pod-to-pod communication control
+- `ingress-routing-demo.yaml` - Host and path-based HTTP routing with Ingress
 
 ### 💾 Storage
 **Location**: `storage/`
@@ -57,6 +59,7 @@ Security contexts, policies, and hardening techniques:
 
 **Current Demos**:
 - `security-context-demo.yaml` - Pod Security Standards and SecurityContext best practices
+- `rbac-demo.yaml` - Least-privilege Role, RoleBinding, ClusterRole, and ClusterRoleBinding patterns
 
 ### 📅 Scheduling
 **Location**: `scheduling/`
@@ -96,6 +99,7 @@ Horizontal and vertical pod autoscaling:
 
 **Current Demos**:
 - `hpa-demo.yaml` - Horizontal Pod Autoscaler with CPU/memory metrics and scaling policies
+- `vpa-demo.yaml` - Vertical Pod Autoscaler recommendations and update policies
 
 ### 🚀 Workloads
 **Location**: `workloads/`
@@ -158,23 +162,23 @@ Each demo should include:
 | Category | Demo | Kubernetes Version | Description |
 |----------|------|-------------------|-------------|
 | Resource Management | [CPU Resize](resource-management/pod-cpu-resize-demo.yaml) | 1.27+ | In-place pod CPU resize without restart |
+| Resource Management | [Memory Resize](resource-management/pod-memory-resize-demo.yaml) | 1.27+ | In-place pod memory resize with cgroup monitoring |
 | Observability | [Health Probes](observability/health-probes-demo.yaml) | 1.16+ | Liveness, readiness, and startup probes |
 | Autoscaling | [HPA](autoscaling/hpa-demo.yaml) | 1.23+ | Horizontal Pod Autoscaler with CPU/memory metrics |
+| Autoscaling | [VPA](autoscaling/vpa-demo.yaml) | 1.23+ | Vertical Pod Autoscaler recommendations and automated right-sizing |
 | Networking | [Network Policies](networking/network-policy-demo.yaml) | 1.7+ | Pod-to-pod communication control with network policies |
+| Networking | [Ingress Routing](networking/ingress-routing-demo.yaml) | 1.19+ | Host and path-based HTTP routing with Ingress |
 | Scheduling | [Affinity Rules](scheduling/affinity-demo.yaml) | 1.18+ | Pod/node affinity, anti-affinity, and topology spread |
 | Security | [Security Context](security/security-context-demo.yaml) | 1.25+ | Pod Security Standards and SecurityContext hardening |
+| Security | [RBAC Policies](security/rbac-demo.yaml) | 1.8+ | Least-privilege API access with RBAC policies |
 | Storage | [Persistent Storage](storage/persistent-storage-demo.yaml) | 1.21+ | PV, PVC, StorageClass, and StatefulSet storage |
 | Workloads | [Workload Types](workloads/workload-types-demo.yaml) | 1.21+ | Deployment, StatefulSet, DaemonSet, Job, CronJob patterns |
 
 ## Roadmap
 
 Upcoming demos:
-- Memory resize demonstrations
-- VPA (Vertical Pod Autoscaler) examples
 - KEDA event-driven autoscaling
-- Ingress controllers and routing
 - Service mesh integration
-- RBAC policy examples
 - Volume snapshots and cloning
 - Custom metrics for HPA
 

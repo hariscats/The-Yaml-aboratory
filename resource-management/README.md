@@ -9,6 +9,8 @@ The demo showcases how Kubernetes can resize container resources (CPU and memory
 ## Files
 
 - `pod-cpu-resize-demo.yaml` - Pod definition with resize policies configured
+- `pod-memory-resize-demo.yaml` - Pod definition for in-place memory resize
+  with memory cgroup monitoring
 
 ## Pod Configuration
 
@@ -150,6 +152,7 @@ resizePolicy:
 
 ```bash
 kubectl delete pod reactor-cpu-resize-demo
+kubectl delete pod memory-resize-demo
 ```
 
 ## Key Benefits

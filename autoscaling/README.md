@@ -13,7 +13,8 @@ This section contains demonstrations of Kubernetes autoscaling features.
 
 ## Demos
 
-*Coming soon!*
+- `hpa-demo.yaml` - Horizontal Pod Autoscaler with CPU/memory metrics and scaling policies
+- `vpa-demo.yaml` - Vertical Pod Autoscaler recommendations and automated right-sizing
 
 ## Common Use Cases
 

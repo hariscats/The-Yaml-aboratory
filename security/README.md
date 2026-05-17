@@ -14,7 +14,8 @@ This section contains demonstrations of Kubernetes security features and best pr
 
 ## Demos
 
-*Coming soon!*
+- `security-context-demo.yaml` - Pod Security Standards and SecurityContext hardening
+- `rbac-demo.yaml` - Least-privilege API access with RBAC policies
 
 ## Common Use Cases
 

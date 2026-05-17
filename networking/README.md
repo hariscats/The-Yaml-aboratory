@@ -12,7 +12,8 @@ This section contains demonstrations of Kubernetes networking features.
 
 ## Demos
 
-*Coming soon!*
+- `network-policy-demo.yaml` - Network policies for pod-to-pod communication control
+- `ingress-routing-demo.yaml` - Host and path-based HTTP routing with Ingress
 
 ## Common Use Cases
 

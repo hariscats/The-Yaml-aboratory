@@ -1,0 +1,167 @@
+---
+# RBAC Policy Demonstration
+# This demo shows least-privilege Role, RoleBinding, ClusterRole, and
+# ClusterRoleBinding patterns.
+# Kubernetes Version: 1.8+
+# Feature: Controls API access for users, groups, and service accounts.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rbac-demo
+  labels:
+    purpose: rbac-demo
+
+---
+# Service account used by the demo application.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-reader
+  namespace: rbac-demo
+automountServiceAccountToken: true
+
+---
+# Namespace-scoped Role with read-only access to selected resources.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-and-config-reader
+  namespace: rbac-demo
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+
+---
+# Bind the read-only Role to the app service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-reader-binding
+  namespace: rbac-demo
+subjects:
+- kind: ServiceAccount
+  name: app-reader
+  namespace: rbac-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-and-config-reader
+
+---
+# ClusterRole with read-only access to node metadata.
+# Cluster-scoped permissions should be used sparingly.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-metadata-reader
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+
+---
+# Bind cluster-scoped node read permissions to the service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: app-node-metadata-reader
+subjects:
+- kind: ServiceAccount
+  name: app-reader
+  namespace: rbac-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: node-metadata-reader
+
+---
+# Demo pod that can use kubectl with its service account token.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rbac-test-client
+  namespace: rbac-demo
+  labels:
+    app: rbac-test-client
+spec:
+  serviceAccountName: app-reader
+  containers:
+  - name: kubectl
+    image: bitnami/kubectl:1.30
+    command:
+    - /bin/sh
+    - -c
+    - sleep 3600
+    resources:
+      requests:
+        cpu: "25m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+  restartPolicy: Never
+
+---
+# How to test RBAC:
+#
+# 1. Apply the manifests:
+#    kubectl apply -f rbac-demo.yaml
+#
+# 2. Check allowed namespace-scoped reads:
+#    kubectl auth can-i list pods \
+#      --as=system:serviceaccount:rbac-demo:app-reader \
+#      -n rbac-demo
+#    kubectl auth can-i get configmaps \
+#      --as=system:serviceaccount:rbac-demo:app-reader \
+#      -n rbac-demo
+#
+# 3. Check blocked writes:
+#    kubectl auth can-i create pods \
+#      --as=system:serviceaccount:rbac-demo:app-reader \
+#      -n rbac-demo
+#
+# 4. Check cluster-scoped read:
+#    kubectl auth can-i list nodes \
+#      --as=system:serviceaccount:rbac-demo:app-reader
+#
+# 5. Test from inside the pod:
+#    kubectl exec -n rbac-demo rbac-test-client -- kubectl get pods
+#    kubectl exec -n rbac-demo rbac-test-client -- kubectl get nodes
+#
+# 6. Cleanup:
+#    kubectl delete namespace rbac-demo
+#    kubectl delete clusterrole node-metadata-reader
+#    kubectl delete clusterrolebinding app-node-metadata-reader
+#
+# Best Practices Demonstrated:
+# ✓ Grant specific verbs on specific resources
+# ✓ Prefer RoleBinding for namespace-scoped access
+# ✓ Use ClusterRoleBinding only for cluster-scoped requirements
+# ✓ Bind permissions to dedicated service accounts
+# ✓ Verify permissions with kubectl auth can-i
+#
+# AKS Compatibility Notes:
+# - Kubernetes RBAC is enabled by default on AKS.
+# - Combine Kubernetes RBAC with Microsoft Entra ID for human access.
+# - Use Azure Workload Identity for Azure resource permissions from pods.
+

@@ -1,0 +1,114 @@
+---
+# Vertical Pod Autoscaler (VPA) Demonstration
+# This demo shows how VPA recommends and applies container resource changes.
+# Kubernetes Version: 1.23+ with the VPA components installed
+# Feature: Right-sizes CPU and memory requests based on observed usage
+#
+# Prerequisites:
+# - Vertical Pod Autoscaler installed in the cluster
+# - Metrics server or another supported metrics pipeline
+# - Do not combine VPA Auto mode with HPA on CPU/memory for the same workload
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpa-demo-app
+  labels:
+    app: vpa-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vpa-demo
+  template:
+    metadata:
+      labels:
+        app: vpa-demo
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            cpu: "25m"
+            memory: "64Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# Service for simple traffic generation and verification.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vpa-demo-service
+  labels:
+    app: vpa-demo
+spec:
+  selector:
+    app: vpa-demo
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+  type: ClusterIP
+
+---
+# VPA in Auto mode updates pod requests by evicting pods when needed.
+# Use updateMode: "Off" first if you only want recommendations.
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vpa-demo-app
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: web
+      minAllowed:
+        cpu: "25m"
+        memory: "64Mi"
+      maxAllowed:
+        cpu: "1"
+        memory: "1Gi"
+      controlledResources:
+      - cpu
+      - memory
+
+---
+# How to test VPA:
+#
+# 1. Install VPA components for your cluster, then apply:
+#    kubectl apply -f vpa-demo.yaml
+#
+# 2. Check the VPA object and recommendations:
+#    kubectl describe vpa vpa-demo
+#    kubectl get vpa vpa-demo -o yaml
+#
+# 3. Generate traffic:
+#    kubectl run -i --tty vpa-load --rm --image=busybox --restart=Never -- \
+#      /bin/sh -c 'while true; do wget -q -O- http://vpa-demo-service; done'
+#
+# 4. Watch pods get recreated with adjusted requests:
+#    kubectl get pods -l app=vpa-demo --watch
+#    kubectl describe pod -l app=vpa-demo | grep -A 5 Requests
+#
+# 5. Try recommendation-only mode:
+#    kubectl patch vpa vpa-demo --type merge \
+#      --patch '{"spec":{"updatePolicy":{"updateMode":"Off"}}}'
+#
+# 6. Cleanup:
+#    kubectl delete -f vpa-demo.yaml
+#
+# AKS Compatibility Notes:
+# - AKS supports VPA when the VPA components are installed.
+# - Managed VPA availability varies by AKS version and region.
+# - For production, test eviction behavior before using updateMode Auto.
+
