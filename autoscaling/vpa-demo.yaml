@@ -25,18 +25,18 @@ spec:
         app: vpa-demo
     spec:
       containers:
-      - name: web
-        image: nginx:1.25-alpine
-        ports:
-        - containerPort: 80
-          name: http
-        resources:
-          requests:
-            cpu: "25m"
-            memory: "64Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
+        - name: web
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
 
 ---
 # Service for simple traffic generation and verification.
@@ -50,9 +50,9 @@ spec:
   selector:
     app: vpa-demo
   ports:
-  - port: 80
-    targetPort: http
-    protocol: TCP
+    - port: 80
+      targetPort: http
+      protocol: TCP
   type: ClusterIP
 
 ---
@@ -71,16 +71,16 @@ spec:
     updateMode: "Auto"
   resourcePolicy:
     containerPolicies:
-    - containerName: web
-      minAllowed:
-        cpu: "25m"
-        memory: "64Mi"
-      maxAllowed:
-        cpu: "1"
-        memory: "1Gi"
-      controlledResources:
-      - cpu
-      - memory
+      - containerName: web
+        minAllowed:
+          cpu: "25m"
+          memory: "64Mi"
+        maxAllowed:
+          cpu: "1"
+          memory: "1Gi"
+        controlledResources:
+          - cpu
+          - memory
 
 ---
 # How to test VPA:
@@ -111,4 +111,3 @@ spec:
 # - AKS supports VPA when the VPA components are installed.
 # - Managed VPA availability varies by AKS version and region.
 # - For production, test eviction behavior before using updateMode Auto.
-

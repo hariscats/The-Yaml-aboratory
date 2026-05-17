@@ -28,24 +28,24 @@ metadata:
   name: pod-and-config-reader
   namespace: rbac-demo
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - services
-  - configmaps
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - apps
-  resources:
-  - deployments
-  verbs:
-  - get
-  - list
-  - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
 
 ---
 # Bind the read-only Role to the app service account.
@@ -55,9 +55,9 @@ metadata:
   name: app-reader-binding
   namespace: rbac-demo
 subjects:
-- kind: ServiceAccount
-  name: app-reader
-  namespace: rbac-demo
+  - kind: ServiceAccount
+    name: app-reader
+    namespace: rbac-demo
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -71,13 +71,13 @@ kind: ClusterRole
 metadata:
   name: node-metadata-reader
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
 
 ---
 # Bind cluster-scoped node read permissions to the service account.
@@ -86,9 +86,9 @@ kind: ClusterRoleBinding
 metadata:
   name: app-node-metadata-reader
 subjects:
-- kind: ServiceAccount
-  name: app-reader
-  namespace: rbac-demo
+  - kind: ServiceAccount
+    name: app-reader
+    namespace: rbac-demo
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -106,19 +106,19 @@ metadata:
 spec:
   serviceAccountName: app-reader
   containers:
-  - name: kubectl
-    image: bitnami/kubectl:1.30
-    command:
-    - /bin/sh
-    - -c
-    - sleep 3600
-    resources:
-      requests:
-        cpu: "25m"
-        memory: "64Mi"
-      limits:
-        cpu: "100m"
-        memory: "128Mi"
+    - name: kubectl
+      image: bitnami/kubectl:1.30
+      command:
+        - /bin/sh
+        - -c
+        - sleep 3600
+      resources:
+        requests:
+          cpu: "25m"
+          memory: "64Mi"
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
   restartPolicy: Never
 
 ---
@@ -164,4 +164,3 @@ spec:
 # - Kubernetes RBAC is enabled by default on AKS.
 # - Combine Kubernetes RBAC with Microsoft Entra ID for human access.
 # - Use Azure Workload Identity for Azure resource permissions from pods.
-

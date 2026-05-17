@@ -11,8 +11,7 @@
 # Testing Instructions:
 # 1. Apply the manifest: kubectl apply -f pod-memory-resize-demo.yaml
 # 2. Watch memory limits: kubectl logs -f memory-resize-demo -c memory-monitor
-# 3. Increase memory:
-#    kubectl patch pod memory-resize-demo --patch '{"spec":{"containers":[{"name":"app","resources":{"requests":{"memory":"256Mi","cpu":"50m"},"limits":{"memory":"256Mi","cpu":"100m"}}}]}}'
+# 3. Increase memory with kubectl patch and set app memory to 256Mi.
 # 4. Verify resize status:
 #    kubectl get pod memory-resize-demo -o jsonpath='{.status.resize}'
 # 5. Cleanup: kubectl delete pod memory-resize-demo
@@ -25,54 +24,53 @@ metadata:
     demo: memory-resize
 spec:
   containers:
-  - name: app
-    image: nginx:1.25-alpine
-    resources:
-      requests:
-        cpu: "50m"
-        memory: "128Mi"
-      limits:
-        cpu: "100m"
-        memory: "128Mi"
-    resizePolicy:
-    - resourceName: cpu
-      restartPolicy: NotRequired
-    - resourceName: memory
-      restartPolicy: NotRequired
+    - name: app
+      image: nginx:1.25-alpine
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "128Mi"
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
+      resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
 
-  - name: memory-monitor
-    image: busybox:latest
-    command:
-    - /bin/sh
-    - -c
-    - |
-      echo "Starting memory limit monitor..."
-      while true; do
-        if [ -f /sys/fs/cgroup/memory.max ]; then
-          LIMIT=$(cat /sys/fs/cgroup/memory.max)
-          CURRENT=$(cat /sys/fs/cgroup/memory.current)
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] limit=$LIMIT current=$CURRENT"
-        elif [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
-          LIMIT=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
-          CURRENT=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes)
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] limit=$LIMIT current=$CURRENT"
-        else
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] memory cgroup files not found"
-        fi
-        sleep 2
-      done
-    resources:
-      requests:
-        cpu: "10m"
-        memory: "32Mi"
-      limits:
-        cpu: "50m"
-        memory: "64Mi"
-    resizePolicy:
-    - resourceName: cpu
-      restartPolicy: NotRequired
-    - resourceName: memory
-      restartPolicy: NotRequired
+    - name: memory-monitor
+      image: busybox:latest
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting memory limit monitor..."
+          while true; do
+            if [ -f /sys/fs/cgroup/memory.max ]; then
+              LIMIT=$(cat /sys/fs/cgroup/memory.max)
+              CURRENT=$(cat /sys/fs/cgroup/memory.current)
+              echo "[$(date '+%H:%M:%S')] limit=$LIMIT current=$CURRENT"
+            elif [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+              LIMIT=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+              CURRENT=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes)
+              echo "[$(date '+%H:%M:%S')] limit=$LIMIT current=$CURRENT"
+            else
+              echo "[$(date '+%H:%M:%S')] memory cgroup files not found"
+            fi
+            sleep 2
+          done
+      resources:
+        requests:
+          cpu: "10m"
+          memory: "32Mi"
+        limits:
+          cpu: "50m"
+          memory: "64Mi"
+      resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
 
   restartPolicy: Always
-

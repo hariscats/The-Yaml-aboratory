@@ -37,20 +37,20 @@ spec:
         version: v1
     spec:
       containers:
-      - name: web
-        image: hashicorp/http-echo:1.0
-        args:
-        - "-text=Hello from web v1"
-        ports:
-        - containerPort: 5678
-          name: http
-        resources:
-          requests:
-            cpu: "25m"
-            memory: "32Mi"
-          limits:
-            cpu: "100m"
-            memory: "64Mi"
+        - name: web
+          image: hashicorp/http-echo:1.0
+          args:
+            - "-text=Hello from web v1"
+          ports:
+            - containerPort: 5678
+              name: http
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
 
 ---
 apiVersion: v1
@@ -63,8 +63,8 @@ spec:
     app: web
     version: v1
   ports:
-  - port: 80
-    targetPort: http
+    - port: 80
+      targetPort: http
 
 ---
 # Version 2 of the demo application.
@@ -89,20 +89,20 @@ spec:
         version: v2
     spec:
       containers:
-      - name: web
-        image: hashicorp/http-echo:1.0
-        args:
-        - "-text=Hello from web v2"
-        ports:
-        - containerPort: 5678
-          name: http
-        resources:
-          requests:
-            cpu: "25m"
-            memory: "32Mi"
-          limits:
-            cpu: "100m"
-            memory: "64Mi"
+        - name: web
+          image: hashicorp/http-echo:1.0
+          args:
+            - "-text=Hello from web v2"
+          ports:
+            - containerPort: 5678
+              name: http
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
 
 ---
 apiVersion: v1
@@ -115,8 +115,8 @@ spec:
     app: web
     version: v2
   ports:
-  - port: 80
-    targetPort: http
+    - port: 80
+      targetPort: http
 
 ---
 # Path based routing:
@@ -132,23 +132,23 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: demo.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: web-v1
-            port:
-              number: 80
-      - path: /v2
-        pathType: Prefix
-        backend:
-          service:
-            name: web-v2
-            port:
-              number: 80
+    - host: demo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-v1
+                port:
+                  number: 80
+          - path: /v2
+            pathType: Prefix
+            backend:
+              service:
+                name: web-v2
+                port:
+                  number: 80
 
 ---
 # Optional TLS configuration example.
@@ -184,4 +184,3 @@ spec:
 # - Use ingress-nginx or Azure Application Gateway Ingress Controller (AGIC).
 # - For AGIC, set ingressClassName to the Application Gateway class.
 # - Use cert-manager or Application Gateway certificates for TLS automation.
-
